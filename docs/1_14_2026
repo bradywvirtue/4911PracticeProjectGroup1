@@ -1,0 +1,23 @@
+## Brainstorming Ideas
+
+* weather distributions
+* delay times (distribution of delays)
+* path of plane
+* plane direction
+* gap in schedules
+* rush hour days (heatmap?)
+
+* aggregaions
+  - date
+  - tail number
+  - airport
+  - manufacturer
+  
+## TODO
+* clone git repo
+* finish ER diagram
+* summary statistics
+* other basic stuff
+  - histograms
+  - correlation plots
+  - faceted boxplots
