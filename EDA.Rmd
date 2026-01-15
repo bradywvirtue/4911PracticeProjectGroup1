@@ -1,0 +1,47 @@
+---
+title: "EDA"
+output: html_document
+---
+
+# Setup
+## Load Packages
+```{r}
+library(nycflights13)
+```
+
+## Load Datasets
+```{r}
+head(airlines)
+head(airports)
+head(flights)
+head(planes)
+head(weather)
+```
+
+```{r}
+airlines_categorical <- c("carrier", "name")
+
+airports_categorical <- c("faa", "name", "dst", "tzone")
+airports_ratio <- c("lat", "lon", "alt", "tz")
+
+flights_categorical <- c("carrier", "tailnum", "origin", "dest", "flight") # may need to cast flight to another type since currently an int
+flights_time <- c("year", "month", "day", "hour", "minute", "time_hour", "dep_time", "scheduled_dep_time", "arr_time", "scheduled_arr_time") # need to figure out how to deal with these... need to convert times to actual time
+flights_ratio <- c("dep_delay", "arr_delay", "air_time", "distance")
+
+planes_categorical <- c("tailnum", "type", "manufacturer", "model", "engine")
+planes_ratio <- c("year", "engines", "seats", "speed") # idk if year really goes here
+
+weather_categorical <- c("origin")
+weather_time <- c("year", "month", "day", "hour", "time_hour") # need to figure out how to deal with these
+weather_ratio <- c("temp", "dewp", "humid", "wind_dir", "wind_speed", "wind_gust", "precip", "pressure")
+weather_ordinal <- c("visib")
+```
+
+# Data Cleaning
+```{r}
+
+```
+
+# Summary Statistics
+
+# Initial Visualizations
