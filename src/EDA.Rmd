@@ -7,15 +7,24 @@ output: html_document
 ## Load Packages
 ```{r}
 library(nycflights13)
+library(tidyverse)
+library(ggplot2)
 ```
 
 ## Load Datasets
 ```{r}
-head(airlines)
+airlines
 head(airports)
 head(flights)
 head(planes)
 head(weather)
+```
+
+```{r}
+# creating PK for flights; need to work more on this
+flights$flight_num <- paste(flights$carrier, flights$flight, flights$day, flights$month, sep="-")
+
+# also need to create PK for weather
 ```
 
 ```{r}
@@ -24,7 +33,7 @@ airlines_categorical <- c("carrier", "name")
 airports_categorical <- c("faa", "name", "dst", "tzone")
 airports_ratio <- c("lat", "lon", "alt", "tz")
 
-flights_categorical <- c("carrier", "tailnum", "origin", "dest", "flight") # may need to cast flight to another type since currently an int
+flights_categorical <- c("carrier", "tailnum", "origin", "dest", "flight", "flight_num") # may need to cast flight to another type since currently an int
 flights_time <- c("year", "month", "day", "hour", "minute", "time_hour", "dep_time", "scheduled_dep_time", "arr_time", "scheduled_arr_time") # need to figure out how to deal with these... need to convert times to actual time
 flights_ratio <- c("dep_delay", "arr_delay", "air_time", "distance")
 
@@ -37,11 +46,62 @@ weather_ratio <- c("temp", "dewp", "humid", "wind_dir", "wind_speed", "wind_gust
 weather_ordinal <- c("visib")
 ```
 
+```{r}
+unique(flights$origin)
+unique(flights$dest)
+```
+
 # Data Cleaning
 ```{r}
 
 ```
 
 # Summary Statistics
+```{r}
+print("airlines")
+length(airlines$carrier)
+length(unique(airlines$carrier))
+
+print("airports")
+length(airports$faa)
+length(unique(airports$faa))
+
+print("flights")
+length(flights$flight_num)
+length(unique(flights$flight_num))
+
+print("planes")
+length(planes$tailnum)
+length(unique(planes$tailnum))
+
+print("weather")
+length(weather$origin)
+```
+```{r}
+max(flights$time_hour)
+min(flights$time_hour)
+```
 
 # Initial Visualizations
+```{r}
+ggplot(data=flights, aes(x=origin)) + geom_bar()
+ggplot(data=flights, aes(x=dest)) + geom_bar()
+ggplot(data=flights, aes(x=carrier)) + geom_bar()
+ggplot(data=flights, aes(x=carrier, fill=origin)) + geom_bar()
+ggplot(data=flights, aes(x=tailnum)) + geom_bar()
+```
+The flights are relatively evenly distributed across the three airports, although EWR has the most flights and LGA has the least. The number of flights from each carrier differs, although some carriers use certain airports more often (e.g. UA and EV from EWR, 9E and B6 from JFK, MQ from LGA).
+
+The number of flights by each plane and to each destination varies a lot.
+
+```{r}
+ggplot(data=flights, aes(x=log(dep_delay), fill=origin)) + geom_boxplot()
+```
+
+## Repeated Histograms
+might need to do some transforms
+
+# Create New Aggregations
+- by tail number
+- by date
+- by origin and destination
