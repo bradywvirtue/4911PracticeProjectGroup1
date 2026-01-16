@@ -9,25 +9,39 @@ output: html_document
 library(nycflights13)
 library(tidyverse)
 library(ggplot2)
+library(patchwork)
 ```
 
 ## Load Datasets
 ```{r}
-airlines
-head(airports)
-head(flights)
-head(planes)
-head(weather)
+# cast to dataframe
+airlines_df = as.data.frame(airlines)
+airports_df = as.data.frame(airports)
+flights_df = as.data.frame(flights)
+planes_df = as.data.frame(planes)
+weather_df = as.data.frame(weather)
+```
+
+
+```{r}
+airlines_df
+head(airports_df)
+head(flights_df)
+head(planes_df)
+head(weather_df)
 ```
 
 ```{r}
-# creating PK for flights; need to work more on this
-flights$flight_num <- paste(flights$carrier, flights$flight, flights$day, flights$month, sep="-")
+# creating PK for flights
+flights_df$flight_num <- paste(flights_df$carrier, flights_df$flight, sep="-")
+flights_df$key <- paste(flights_df$carrier, flights_df$flight, flights_df$time_hour, sep="-")
 
 # also need to create PK for weather
+weather_df$key <- paste(weather_df$origin, weather_df$time_hour, sep="-")
 ```
 
 ```{r}
+# keeping track of which kind of variable each column is
 airlines_categorical <- c("carrier", "name")
 
 airports_categorical <- c("faa", "name", "dst", "tzone")
@@ -47,61 +61,145 @@ weather_ordinal <- c("visib")
 ```
 
 ```{r}
-unique(flights$origin)
-unique(flights$dest)
+unique(flights_df$origin)
+unique(flights_df$dest)
 ```
 
 # Data Cleaning
 ```{r}
-
+# check for NA
+colSums(sapply(airports_df, is.na))
+colSums(sapply(flights_df, is.na))
+colSums(sapply(planes_df, is.na))
+colSums(sapply(weather_df, is.na))
 ```
+There are a few columns missing a lot of values. TODO: deal with this
 
 # Summary Statistics
 ```{r}
+# checking to see if each row can be identified uniquely
 print("airlines")
-length(airlines$carrier)
-length(unique(airlines$carrier))
+length(airlines_df$carrier)
+length(unique(airlines_df$carrier))
 
 print("airports")
-length(airports$faa)
-length(unique(airports$faa))
+length(airports_df$faa)
+length(unique(airports_df$faa))
 
 print("flights")
-length(flights$flight_num)
-length(unique(flights$flight_num))
+length(flights_df$flight_num)
+length(unique(flights_df$flight_num))
+length(unique(flights_df$key))
+length(unique(flights_df$tailnum))
 
 print("planes")
-length(planes$tailnum)
-length(unique(planes$tailnum))
+length(planes_df$tailnum)
+length(unique(planes_df$tailnum))
 
 print("weather")
-length(weather$origin)
+length(weather_df$key)
+length(weather_df$key)
 ```
+Length of dataframes:
+airlines = 16
+airports = 1,458
+flights = 336,776
+planes = 3,322
+weather = 26,115
+
+The number of unique tail numbers in flights do not match the number of unique tail numbers in planes, suggesting that there may be some missing records in the planes table. Additionally, the number of carrier + flight numbers in flights is much less than the table length, suggesting that this cannot be used as the primary key.
+
 ```{r}
-max(flights$time_hour)
-min(flights$time_hour)
+max(flights_df$time_hour)
+min(flights_df$time_hour)
+```
+## Numerical Summaries
+```{r}
+print("-----flights------")
+summary(flights%>%select(all_of(flights_ratio)))
+print("-----planes------")
+summary(planes%>%select(all_of(planes_ratio)))
+print("-----weather------")
+summary(weather%>%select(all_of(weather_ratio)))
 ```
 
 # Initial Visualizations
-```{r}
-ggplot(data=flights, aes(x=origin)) + geom_bar()
-ggplot(data=flights, aes(x=dest)) + geom_bar()
-ggplot(data=flights, aes(x=carrier)) + geom_bar()
-ggplot(data=flights, aes(x=carrier, fill=origin)) + geom_bar()
-ggplot(data=flights, aes(x=tailnum)) + geom_bar()
+
+## Repeated Barplots
+```{r, fig.width=16, fig.height=12}
+barplot_grid <- function(df, cat_vars, color, n_col){
+  cat_plots <- lapply(cat_vars, function(var) {
+    ggplot(df, aes_string(x = var)) +
+      geom_bar(fill = color) +
+      labs(title = paste("Frequency of", var), x = var, y = "Relative Frequency") +
+      theme_minimal()
+  })
+  
+  return(wrap_plots(cat_plots, ncol = n_col))
+}
+
+barplot_grid(airports_df, airports_categorical, "steelblue", 3)
+barplot_grid(flights_df, flights_categorical, "forestgreen", 3)
+barplot_grid(planes_df, planes_categorical, "coral", 3)
 ```
 The flights are relatively evenly distributed across the three airports, although EWR has the most flights and LGA has the least. The number of flights from each carrier differs, although some carriers use certain airports more often (e.g. UA and EV from EWR, 9E and B6 from JFK, MQ from LGA).
 
 The number of flights by each plane and to each destination varies a lot.
 
-```{r}
-ggplot(data=flights, aes(x=log(dep_delay), fill=origin)) + geom_boxplot()
+## Repeated Boxplots
+```{r, fig.width=10, fig.height=6}
+boxplot_grid <- function(df, num_vars, color, n_col){
+  box_plots <- lapply(num_vars, function(var) {
+    ggplot(df, aes_string(x = var, y = "1")) +
+      geom_boxplot(fill = color) +
+      labs(title = paste("Boxplot of", var), x = NULL, y = var) +
+      theme_minimal()
+  })
+  return(wrap_plots(box_plots, ncol = n_col))
+}
+
+boxplot_grid(airports_df, airports_ratio, "steelblue", 2)
+boxplot_grid(flights_df, flights_ratio, "forestgreen", 2)
+boxplot_grid(planes_df, planes_ratio, "coral", 2)
+boxplot_grid(weather_df, weather_ratio, "darkorchid", 3)
 ```
 
 ## Repeated Histograms
-might need to do some transforms
+```{r}
+hist_grid <- function(df, num_vars, color, n_col){
+  hist_plots <- lapply(num_vars, function(var) {
+    ggplot(df, aes_string(x = var)) +
+      geom_histogram(fill = color, bins = 10) +
+      labs(title = paste("Histogram of", var), x = NULL, y = var) +
+      theme_minimal()
+  })
+  return(wrap_plots(hist_plots, ncol = n_col))
+}
+
+hist_grid(airports_df, airports_ratio, "steelblue", 2)
+hist_grid(flights_df, flights_ratio, "forestgreen", 2)
+hist_grid(planes_df, planes_ratio, "coral", 2)
+hist_grid(weather_df, weather_ratio, "darkorchid", 3)
+```
+Departure delay and arrival delay are skewed
+
+## Faceted Plots
+May want to pick a specific origin, although it doesn't look like there's a meaningful difference
+```{r}
+ggplot(data=flights_df, aes(x=carrier, fill=origin)) + geom_bar()
+ggplot(data=flights_df, aes(x=log(dep_delay), fill=origin)) + geom_boxplot()
+```
+
+# Thoughts
+Important response variables: arrival delay and departure delay (is there a meaningful difference between these? are they related?)
+New variables:
+direction (use lat and lon -- maybe slope between?)
+could also combine and see what most important predictors are using dimensionality reduction technique
 
 # Create New Aggregations
-- by tail number
+- combine sources
+- by tail number (gap between flights; number of previous flights)
+- tail number + date
 - by date
 - by origin and destination
+- airline?
