@@ -34,7 +34,7 @@ head(weather_df)
 ```{r}
 # creating PK for flights
 flights_df$flight_num <- paste(flights_df$carrier, flights_df$flight, sep="-")
-flights_df$key <- paste(flights_df$carrier, flights_df$flight, flights_df$time_hour, sep="-")
+flights_df$key <- paste(flights_df$carrier, flights_df$flight, flights_df$month, flights_df$date, sep="-")
 
 # also need to create PK for weather
 weather_df$key <- paste(weather_df$origin, weather_df$time_hour, sep="-")
@@ -73,7 +73,27 @@ colSums(sapply(flights_df, is.na))
 colSums(sapply(planes_df, is.na))
 colSums(sapply(weather_df, is.na))
 ```
-There are a few columns missing a lot of values. TODO: deal with this
+There are a few columns missing a lot of values. TODO: deal with this. 
+
+```{r}
+flights_df <- flights_df%>%
+  mutate(
+    date = paste(month, day, sep="-"),
+    cancellation = if_else(is.na(air_time), 1, 0),
+    delayed_departure = dep_delay > 0,
+    on_time_departure = dep_delay == 0,
+    early_departure = dep_delay < 0,
+    delayed_arrival = arr_delay > 0,
+    on_time_arrival = arr_delay == 0,
+    early_arrival = arr_delay < 0,
+    departure_type = if_else(delayed_departure, "delayed", if_else(early_departure, "early", "on-time")),
+    arrival_type = if_else(delayed_arrival, "delayed", if_else(early_arrival, "early", "on-time"))
+  )
+head(flights_df)
+
+cleaned_df <- flights_df%>%subset(cancellation == 0)
+colSums(sapply(cleaned_df, is.na))
+```
 
 # Summary Statistics
 ```{r}
@@ -87,10 +107,10 @@ length(airports_df$faa)
 length(unique(airports_df$faa))
 
 print("flights")
-length(flights_df$flight_num)
-length(unique(flights_df$flight_num))
-length(unique(flights_df$key))
-length(unique(flights_df$tailnum))
+length(cleaned_df$flight_num)
+length(unique(cleaned_df$flight_num))
+length(unique(cleaned_df$key))
+length(unique(cleaned_df$tailnum))
 
 print("planes")
 length(planes_df$tailnum)
@@ -189,17 +209,66 @@ May want to pick a specific origin, although it doesn't look like there's a mean
 ggplot(data=flights_df, aes(x=carrier, fill=origin)) + geom_bar()
 ggplot(data=flights_df, aes(x=log(dep_delay), fill=origin)) + geom_boxplot()
 ```
+# Merge Dataframes
+
+# Classifying Delay Types
+**Does a delayed departure mean a delayed arrival? What percentage of flights are delayed (in departure or arrival)?** 
+```{r}
+table(cleaned_df$departure_type, cleaned_df$arrival_type)
+table(cleaned_df$departure_type) / length(cleaned_df$departure_type)
+table(cleaned_df$arrival_type) / length(cleaned_df$arrival_type)
+table(cleaned_df$departure_type, cleaned_df$arrival_type) / length(cleaned_df$arrival_type)
+```
+
+**Given a flight is delayed in departing, is it more likely that the arrival will also be delayed? Is there a certain threshold when this happens?**
+```{r}
+
+```
+
+
+**Does this breakdown differ by airline or departure airport?**
+```{r}
+jfk <- cleaned_df%>%subset(origin=="JFK")
+ewr <- cleaned_df%>%subset(origin=="EWR")
+lga <- cleaned_df%>%subset(origin=="LGA")
+
+print("jfk")
+table(jfk$departure_type) / length(jfk$delayed_arrival)
+table(jfk$arrival_type) / length(jfk$delayed_arrival)
+table(jfk$departure_type, jfk$arrival_type) / length(jfk$delayed_arrival)
+
+print("ewr")
+table(ewr$departure_type) / length(ewr$delayed_arrival)
+table(ewr$arrival_type) / length(ewr$delayed_arrival)
+table(ewr$departure_type, ewr$arrival_type) / length(ewr$delayed_arrival)
+
+print("lga")
+table(lga$departure_type) / length(lga$delayed_arrival)
+table(lga$arrival_type) / length(lga$delayed_arrival)
+table(lga$departure_type, lga$arrival_type) / length(lga$delayed_arrival)
+```
+are these statistically significant differences??
+
+```{r}
+ggplot(cleaned_df, aes(x=carrier, fill=departure_type)) + facet_grid(vars(col=arrival_type)) + geom_bar()
+ggplot(cleaned_df, aes(x=origin, fill=departure_type)) + facet_grid(vars(col=arrival_type)) + geom_bar()
+```
 
 # Thoughts
 Important response variables: arrival delay and departure delay (is there a meaningful difference between these? are they related?)
 New variables:
 direction (use lat and lon -- maybe slope between?)
 could also combine and see what most important predictors are using dimensionality reduction technique
+age of the plane -- create new variable for year manufactured
 
 # Create New Aggregations
-- combine sources
-- by tail number (gap between flights; number of previous flights)
-- tail number + date
-- by date
-- by origin and destination
-- airline?
+```{r}
+plane_date_agg <- cleaned_df%>%
+  group_by(date, tailnum)%>%
+  summarise(
+    n_flights = n_distinct(flight_num),
+    n_delayed_arrival = sum(delayed_arrival),
+    perc_delay_arrival = n_delayed_arrival/n_flights
+  )
+```
+
