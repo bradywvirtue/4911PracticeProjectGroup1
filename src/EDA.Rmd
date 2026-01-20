@@ -10,6 +10,7 @@ library(nycflights13)
 library(tidyverse)
 library(ggplot2)
 library(patchwork)
+library(GGally)
 ```
 
 ## Load Datasets
@@ -87,11 +88,13 @@ flights_df <- flights_df%>%
     on_time_arrival = arr_delay == 0,
     early_arrival = arr_delay < 0,
     departure_type = if_else(delayed_departure, "delayed", if_else(early_departure, "early", "on-time")),
-    arrival_type = if_else(delayed_arrival, "delayed", if_else(early_arrival, "early", "on-time"))
+    arrival_type = if_else(delayed_arrival, "delayed", if_else(early_arrival, "early", "on-time")),
+    delay_difference = arr_delay - dep_delay # does having a delayed departure --> a delayed arrival?
   )
-head(flights_df)
 
-cleaned_df <- flights_df%>%subset(cancellation == 0)
+cleaned_df <- left_join(flights_df%>%subset(cancellation == 0), airlines, by="carrier")
+head(cleaned_df)
+
 colSums(sapply(cleaned_df, is.na))
 ```
 
@@ -182,6 +185,8 @@ boxplot_grid(airports_df, airports_ratio, "steelblue", 2)
 boxplot_grid(flights_df, flights_ratio, "forestgreen", 2)
 boxplot_grid(planes_df, planes_ratio, "coral", 2)
 boxplot_grid(weather_df, weather_ratio, "darkorchid", 3)
+
+boxplot(cleaned_df$delay_difference)
 ```
 
 ## Repeated Histograms
@@ -201,7 +206,7 @@ hist_grid(flights_df, flights_ratio, "forestgreen", 2)
 hist_grid(planes_df, planes_ratio, "coral", 2)
 hist_grid(weather_df, weather_ratio, "darkorchid", 3)
 ```
-Departure delay and arrival delay are skewed
+Departure delay and arrival delay are skewed. air time is bimodal
 
 ## Faceted Plots
 May want to pick a specific origin, although it doesn't look like there's a meaningful difference
@@ -209,6 +214,13 @@ May want to pick a specific origin, although it doesn't look like there's a mean
 ggplot(data=flights_df, aes(x=carrier, fill=origin)) + geom_bar()
 ggplot(data=flights_df, aes(x=log(dep_delay), fill=origin)) + geom_boxplot()
 ```
+## Scatterplots
+```{r}
+ggplot(data=flights, aes(x=dep_delay, y=arr_delay)) + geom_point() + geom_smooth()
+ggplot(data=flights, aes(x=air_time, y=arr_delay)) + geom_point() + geom_smooth()
+```
+
+
 # Merge Dataframes
 
 # Classifying Delay Types
@@ -222,9 +234,8 @@ table(cleaned_df$departure_type, cleaned_df$arrival_type) / length(cleaned_df$ar
 
 **Given a flight is delayed in departing, is it more likely that the arrival will also be delayed? Is there a certain threshold when this happens?**
 ```{r}
-
+ggplot(cleaned_df, aes(x = arr_delay)) + facet_grid(vars(col = departure_type)) + geom_histogram()
 ```
-
 
 **Does this breakdown differ by airline or departure airport?**
 ```{r}
@@ -249,10 +260,38 @@ table(lga$departure_type, lga$arrival_type) / length(lga$delayed_arrival)
 ```
 are these statistically significant differences??
 
-```{r}
-ggplot(cleaned_df, aes(x=carrier, fill=departure_type)) + facet_grid(vars(col=arrival_type)) + geom_bar()
-ggplot(cleaned_df, aes(x=origin, fill=departure_type)) + facet_grid(vars(col=arrival_type)) + geom_bar()
+```{r, fig.width=20, fig.height=8}
+ggplot(cleaned_df, aes(x=name, fill=arrival_type)) + 
+  geom_bar() + 
+  labs(
+    title="Arrival Status by Carrier", 
+    x = "Carrier",
+    y = "Count of Flights")
+
+ggplot(cleaned_df, aes(x=origin, fill=arrival_type)) + 
+  geom_bar() + 
+    labs(
+    title="Arrival Status by Origin", 
+    x = "Origin",
+    y = "Count of Flights")
+
+ggplot(cleaned_df, aes(x=name, fill=arrival_type)) + 
+  geom_bar(position="fill") +
+  labs(
+    title="Proportion of Arrival Status by Carrier", 
+    x = "Carrier",
+    y = "Proportion of Flights")
+
+ggplot(cleaned_df, aes(x=name, y=air_time)) + geom_boxplot()
+ggplot(cleaned_df, aes(x=name, y=dep_delay)) + geom_boxplot()
+ggplot(cleaned_df, aes(x=name, y=arr_delay)) + geom_boxplot()
+ggplot(cleaned_df, aes(x=name, y=delay_difference)) + geom_boxplot()
 ```
+Frontier and AirTran have the most delays, proportionally. Hawaiian has the least delays. However, Frontier, Hawaiian also don't have many flights. United, Delta, ExpressJet, JetBlue have a lot of flights. Airports are relatively similar.
+When facet air time by carrier, normal distributions. Some airlines have a wider range of airtimes, prob bc they go to the most places. others like Frontier/Hawaiian have a very narrow range.
+Departure and arrival delays are all pretty skewed.
+
+
 
 # Thoughts
 Important response variables: arrival delay and departure delay (is there a meaningful difference between these? are they related?)
@@ -262,13 +301,97 @@ could also combine and see what most important predictors are using dimensionali
 age of the plane -- create new variable for year manufactured
 
 # Create New Aggregations
-```{r}
-plane_date_agg <- cleaned_df%>%
-  group_by(date, tailnum)%>%
+```{r, message=FALSE}
+tailnum_agg <- cleaned_df%>%
+  group_by(tailnum)%>%
   summarise(
-    n_flights = n_distinct(flight_num),
+    n_flights = n(),
+    avg_dep_delay = mean(dep_delay),
+    avg_arr_delay = mean(arr_delay),
     n_delayed_arrival = sum(delayed_arrival),
     perc_delay_arrival = n_delayed_arrival/n_flights
   )
+
+ggpairs(tailnum_agg%>%select(-tailnum))
+ggplot(data = tailnum_agg, aes(x=n_flights, y = perc_delay_arrival)) + geom_point(size = 0.5)
+```
+
+```{r}
+# carrier summary
+carrier_agg <- cleaned_df%>%
+  group_by(name) %>%
+  summarise(
+    fleet_size = n_distinct(tailnum),
+    n_flights = n(),
+    n_dest = n_distinct(dest),
+    n_delay_departure = sum(delayed_departure),
+    n_delay_arrival = sum(delayed_arrival),
+    avg_flight_time = mean(air_time),
+    avg_arr_delay = mean(arr_delay),
+    std_arr_delay = sd(arr_delay),
+    avg_dep_delay = mean(dep_delay),
+    std_dep_delay = sd(dep_delay),
+    avg_delay_diff = mean(delay_difference),
+    std_delay_diff = sd(delay_difference)
+  ) %>%
+  mutate(
+    std_err_arr_delay = std_arr_delay / sqrt(n_flights),
+    conf_lower_arr_delay = avg_arr_delay - qt(0.975, df = n_flights - 1) * std_err_arr_delay,
+    conf_upper_arr_delay = avg_arr_delay + qt(0.975, df = n_flights - 1) * std_err_arr_delay,
+    std_err_dep_delay =  std_dep_delay / sqrt(n_flights),
+    conf_lower_dep_delay = avg_dep_delay - qt(0.975, df = n_flights - 1) * std_err_dep_delay,
+    conf_upper_dep_delay = avg_dep_delay + qt(0.975, df = n_flights - 1) * std_err_dep_delay,
+    std_err_delay_diff =  std_delay_diff / sqrt(n_flights),
+    conf_lower_delay_diff = avg_delay_diff - qt(0.975, df = n_flights - 1) * std_err_delay_diff,
+    conf_upper_delay_diff = avg_delay_diff + qt(0.975, df = n_flights - 1) * std_err_delay_diff
+  )
+
+carrier_agg
+```
+
+```{r, message=FALSE}
+ggpairs(carrier_agg%>%
+        select(c(fleet_size, n_flights, n_dest, n_delay_arrival, avg_flight_time, avg_arr_delay, avg_dep_delay, avg_delay_diff))
+      )
+```
+
+
+```{r, fig.width=22, fig.height=8}
+ggplot(carrier_agg, aes(x = reorder(name, avg_dep_delay), y = avg_dep_delay)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf_lower_dep_delay, ymax = conf_upper_dep_delay)) + 
+  geom_hline(aes(yintercept = mean(cleaned_df$dep_delay)), color="turquoise", linewidth=3) +
+  labs(
+    title = "Confidence Intervals for Mean Departure Delay By Carrier",
+    x = "Carrier",
+    y = "Mean Departure Delay (Minutes)"
+  )
+
+ggplot(carrier_agg, aes(x = reorder(name, avg_arr_delay), y = avg_arr_delay)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf_lower_arr_delay, ymax = conf_upper_arr_delay)) + 
+  geom_hline(aes(yintercept = mean(cleaned_df$arr_delay)), color="turquoise", linewidth=3) +
+  labs(
+    title = "Confidence Intervals for Mean Arrival Delay By Carrier",
+    x = "Carrier",
+    y = "Mean Arrival Delay (Minutes)"
+  )
+
+ggplot(carrier_agg, aes(x = reorder(name, avg_delay_diff), y = avg_delay_diff)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf_lower_delay_diff, ymax = conf_upper_delay_diff)) + 
+  geom_hline(aes(yintercept = mean(cleaned_df$delay_difference)), color="turquoise", linewidth=3) +
+  labs(
+    title = "Confidence Intervals for Delay Difference By Carrier",
+    x = "Carrier",
+    y = "Difference Between Arrival Delay and Departure Delay (Minutes)"
+  ) # negative values: despite a delayed departure, arrive earlier
+```
+Budget airlines consistently perform worse
+
+```{r}
+mega_table <- inner_join(flights, planes, by="tailnum")
+
+head(mega_table)
 ```
 
